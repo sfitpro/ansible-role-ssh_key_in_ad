@@ -1,0 +1,71 @@
+---
+# tasks file for ssh_key_in_ad
+- name: check if ssh is defined in /etc/sssd/sssd.conf file's services
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/etc/sssd/sssd.conf"
+    state: absent
+    regexp: "^\\s{0,}services = .*ssh.*$"
+    backup: false
+  check_mode: true
+  changed_when: false
+  register: check
+
+- name: display check result
+  ansible.builtin.debug:
+    msg: "{{ check.found }}"
+
+- name: when ssh is missing, append it to /etc/sssd/sssd.conf's services
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/etc/sssd/sssd.conf"
+    state: present
+    backrefs: true
+    regexp: "^(\\s{0,}services = .*)$"
+    line: "\\1, ssh"
+    backup: true
+  when: check.found == 0
+  notify: clear sssd cache
+
+- name: prase ad_domain_name
+  ansible.builtin.set_fact:
+    ad_domain_name_section: "[domain/{{ ad_domain_name }}]"
+
+- name: display ad_domain_name_section
+  ansible.builtin.debug:
+    msg: "{{ ad_domain_name_section }}"
+
+- name: replace each space with \space, each ( with \(, each ) with \) in ad_domain_name_section_regexp
+  ansible.builtin.set_fact:
+    ad_domain_name_section_regexp: "{{ ad_domain_name_section | regex_escape() }}"
+
+- name: display ad_domain_name_section_regexp
+  ansible.builtin.debug:
+    msg: "{{ ad_domain_name_section_regexp }}"
+
+- name: add ldap_user_extra_attrs and ldap_user_ssh_public_key parameters to /etc/sssd/sssd.conf's [domain] section
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/etc/sssd/sssd.conf"
+    state: present
+    insertafter: "^{{ ad_domain_name_section_regexp }}"
+    line: "{{ item }}"
+    backup: true
+  loop:
+    - ldap_user_extra_attrs = altSecurityIdentities
+    - ldap_user_ssh_public_key = altSecurityIdentities
+  notify: clear sssd cache
+
+- name: add ssh parameters to /etc/ssh/sshd_config
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/etc/ssh/sshd_config"
+    state: present
+    insertafter: "^AuthorizedKeysFile"
+    line: "{{ item }}"
+    backup: true
+    validate: sshd -t -f %s
+  loop:
+    - AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys
+    - AuthorizedKeysCommandUser root
+  notify: restart sshd

@@ -1,0 +1,15 @@
+---
+# handlers file for ssh_key_in_ad
+- name: clear sssd cache
+  become: true
+  ansible.builtin.shell: |
+    systemctl stop sssd
+    rm -rf "/var/lib/sss/db/*"
+    rm -rf "/var/lib/sss/mc/*"
+    systemctl start sssd
+
+- name: restart sshd
+  become: true
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
