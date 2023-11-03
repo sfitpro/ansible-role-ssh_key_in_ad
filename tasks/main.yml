@@ -66,6 +66,6 @@
     backup: true
     validate: sshd -t -f %s
   loop:
-    - AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys
     - AuthorizedKeysCommandUser root
+    - AuthorizedKeysCommand /usr/bin/sss_ssh_authorizedkeys
   notify: restart sshd
